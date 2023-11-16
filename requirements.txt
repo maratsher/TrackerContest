@@ -1,0 +1,7 @@
+numpy~=1.24.1
+PyGObject~=3.42.2
+imgui~=2.0.0
+glfw~=2.5.5
+PyOpenGL~=3.1.7
+opencv-python~=4.8.1.78
+#pyserial~=3.5
