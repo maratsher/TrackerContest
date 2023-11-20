@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 import threading
 import socket
@@ -12,13 +12,15 @@ from TrackerContest.core import Bus
 
 
 class TrackerClient:
-    def __init__(self, client_socket: socket.socket, address: str, name: str, color: np.ndarray):
-        self._name: str = name
-        self._color: np.ndarray = color
-        self._address: str = address
-        self._current_bbox: Optional[np.ndarray] = None
+
+    def __init__(self, client_socket: socket.socket):
+        self._name: str = ""
+        self._color: tuple = ()
+        self._address: str = ""
         self._draw = True
         self._current_fps = 0
+
+        self._bboxes: Dict = {}
 
         self._client_thread: Optional[threading.Thread] = None
         self._client_socket: socket.socket = client_socket
@@ -36,10 +38,13 @@ class TrackerClient:
     @property
     def color(self):
         return self._color
-
+    
     @property
-    def current_box(self):
-        return self._current_bbox
+    def get_bbox(self, nf: int = -1):
+        if nf == -1:
+            return self._bboxes.popitem()
+        else:
+            return self._bboxes.get(nf)
 
     @property
     def draw(self) -> bool:
@@ -49,30 +54,48 @@ class TrackerClient:
     def draw(self, draw: bool):
         self._draw = draw
 
-    def start_track(self, frame: np.ndarray):
-        self._client_thread = threading.Thread(target=self._track, daemon=True, args=frame)
+    @address.setter
+    def address(self, address: str):
+        self._address = address
+
+    def first_meeting(self):
+        data = self._client_socket.recv(1024)
+        info = pickle.loads(data)
+        self._name = info.get("name")
+        self._color = info.get("color")
+
+    def start_track(self, frame: np.ndarray, nf: int):
+        self._client_thread = threading.Thread(target=self._track, daemon=True, args=(frame, nf))
         self._client_thread.start()
 
-    def _track(self, frame: np.ndarray):
+    def start_init(self, gt_bbox: tuple):
+        self._client_thread = threading.Thread(target=self._init, daemon=True, args=gt_bbox)
+
+    def _track(self, frame: np.ndarray, nf: int):
         try:
             self._send_data(frame)
             t1 = time.time()
-            self._receive_data()
+            self._receive_data(nf)
             t2 = time.time()
             self._current_fps = 1/(t1-t2)
             print(f"Frames sent to {self.address} ({self.name})")
         except Exception as e:
             print(f"Error sending frames to {self.address} ({self.name}): {e}")
 
-
+    def _init(self, gt_bbox):
+        try:
+            self._send_data(gt_bbox)
+            print(f"Init tracker {self.address} ({self.name})")
+        except Exception as e:
+            print(f"Error init tracker {self.address} ({self.name}): {e}")
 
     def _send_data(self, frame: np.ndarray):
         serialized_array = pickle.dumps(frame)
         self._client_socket.send(serialized_array)
 
-    def _receive_data(self):
+    def _receive_data(self, nf: int):
         response = self._client_socket.recv(self._receive_buffer)
-        self._current_bbox = pickle.loads(response)
+        self._bboxes[nf] = pickle.loads(response)
 
 
 class TrackerBroker:
@@ -108,22 +131,26 @@ class TrackerBroker:
         while True:
             try:
                 client_socket, address = self._server_socket.accept()
-                name = client_socket.recv(1024).decode('utf-8')
-                color = pickle.loads(client_socket.recv(1024))
-                tracker_client = TrackerClient(client_socket, address, name, color)
+                tracker_client = TrackerClient(client_socket)
+                tracker_client.first_meeting()
+                tracker_client.address = "".join(map(str, address))
                 self._clients.append(tracker_client)
-                Bus.publish("connected-new-tracker", {"name": name, "color": color, "address": address})
-                print(f"Connection established with {address} ({name})")
+                print(tracker_client.color)
+                Bus.publish("connected-new-tracker", tracker_client.name, tracker_client.color, tracker_client.address)
+                print(f"Connection established with {tracker_client.name}")
             except Exception as e:
                 print("", e)
 
-    def send_frame_all_clients(self, frame: np.ndarray):
+    def send_frame_all_clients(self, frame: np.ndarray, nf: int):
         for client in self._clients:
-            client.start_track(frame)
+            client.start_track(frame, nf)
 
-    def get_all_bbox(self) -> list[tuple[ndarray | None, ndarray]]:
-        bbox_list = [(client.current_box, client.color) for client in self._clients]
-        return bbox_list
+    def init_all_tracker(self, gt_bbox: tuple):
+        for client in self._clients:
+            client.start_init(gt_bbox)
+
+    def get_all_bbox(self, nf: int = -1) -> list:
+        return [(client.get_bbox(nf), client.color) for client in self._clients]
 
     def start(self):
         self._server_thread.start()

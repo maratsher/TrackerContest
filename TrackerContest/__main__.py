@@ -1,6 +1,6 @@
 import argparse
 
-from TrackerContest.app import OmenApp
+from TrackerContest.app import TrackerContest
 
 
 parser = argparse.ArgumentParser()
@@ -10,7 +10,7 @@ parser.add_argument("--fullscreen", help="Fullscreen window", action="store_true
 args = parser.parse_args()
 
 
-app = OmenApp(
+app = TrackerContest(
     window_width=args.window_width,
     window_height=args.window_height,
     fullscreen=args.fullscreen)

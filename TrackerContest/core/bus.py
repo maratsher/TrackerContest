@@ -3,9 +3,6 @@ import logging
 
 from typing import Dict, Callable
 
-
-
-
 _logger = logging.getLogger("Bus")
 _logger.setLevel(logging.DEBUG)
 

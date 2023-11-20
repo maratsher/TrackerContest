@@ -9,17 +9,19 @@ import numpy as np
 
 from TrackerContest.core import Bus
 
+
 class VideoPlayer:
-    def __init__(self, queue_size=100):
+    ROI_SELECTION_WINDOW_NAME = "Select ROI"
+
+    def __init__(self, queue_size=2000):
         self._cap: Optional[cv2.VideoCapture] = None
         self._fps: int = 0
         self._frame_size: Optional[tuple[int]] = None
 
         self._frame_queue = queue.Queue(maxsize=queue_size)
         self._playing = False
-        self._paused = False
+        self._paused = True
         self._current_frame = 0
-        #self._target_fps = target_fps
 
         self._frame_lock = threading.Lock()
         self._frame_thread = threading.Thread(target=self._load_frames)
@@ -32,6 +34,7 @@ class VideoPlayer:
         self._cap = cv2.VideoCapture(file_path)
         self._fps = int(self._cap.get(cv2.CAP_PROP_FPS))
         self._frame_size = (int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        self.start()
         Bus.publish("set-init-fps", self._fps)
 
     def _load_frames(self):
@@ -41,8 +44,9 @@ class VideoPlayer:
                 if not ret:
                     self.playing = False
                     break
-                self._frame_queue.put((self._current_frame, frame))
                 self._current_frame += 1
+                Bus.publish("new-frame", frame, self._current_frame)
+                self._frame_queue.put((self._current_frame, frame))
                 time.sleep(1/self._fps)
             else:
                 time.sleep(0.1)
@@ -58,6 +62,10 @@ class VideoPlayer:
     @property
     def on_pause(self) -> bool:
         return self._paused
+
+    @property
+    def on_playing(self) -> bool:
+        return self._playing
 
     def set_fps(self, fps: int):
         self._fps = fps
@@ -86,44 +94,18 @@ class VideoPlayer:
     def restart(self):
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    def seek_forward(self, seconds):
-        target_frame = int(self._current_frame + seconds * self._fps)
-        with self._frame_lock:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-            self._current_frame = target_frame
+    def seek_forward(self, fn: int):
+        target_frame = int(self._current_frame + fn)
+        self.pause()
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        self._current_frame = target_frame
+        self.start()
 
-    def seek_backward(self, seconds):
-        target_frame = int(self._current_frame - seconds * self._fps)
+    def seek_backward(self, fn: int):
+        target_frame = int(self._current_frame - fn)
         if target_frame < 0:
             target_frame = 0
-        with self._frame_lock:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-            self._current_frame = target_frame
-
-
-if __name__ == "__main__":
-    video_path = "/home/maratsher/Work/omen-viewer/TrackerContest/core/video/test.mp4"
-    target_fps = 30  # Set your desired target fps
-    player = VideoPlayer(video_path, target_fps=target_fps)
-
-    player.start()
-
-    while player.playing:
-        frame_info = player.get_frame()
-        if frame_info:
-            frame_number, frame = frame_info
-            cv2.imshow("Video Player", frame)
-
-            # Calculate delay based on target_fps
-            delay = int(1000 / player.target_fps)
-
-            key = cv2.waitKey(delay) & 0xFF
-            if key == ord("q"):
-                break
-            elif key == 81:  # Left arrow key
-                player.seek_backward(5)  # Adjust the seek duration as needed
-            elif key == 83:  # Right arrow key
-                player.seek_forward(5)  # Adjust the seek duration as needed
-
-    cv2.destroyAllWindows()
-    player.stop()
+        self.pause()
+        self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        self._current_frame = target_frame
+        self.start()

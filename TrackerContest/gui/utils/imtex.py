@@ -32,7 +32,6 @@ class ImTex:
         gl.glDeleteTextures(1, self.__tex_id)
 
     def upload_data(self, data, tex_format: TexFormat = TexFormat.RGB):
-        print("ID 1", self.__tex_id)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self.__tex_id)
         gl.glTexSubImage2D(gl.GL_TEXTURE_2D, 0, 0, 0, self.__tex_size.x, self.__tex_size.y,
                            tex_format.value, gl.GL_UNSIGNED_BYTE, data)

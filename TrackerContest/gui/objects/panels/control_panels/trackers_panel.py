@@ -11,29 +11,27 @@ class TrackersPanel(Panel):
     def __init__(self, name: str = "Trackers"):
         super().__init__(name)
 
-        self.trackers: Dict = {
-            "Krolik": {"color": (1.0, 0.0, 0.0), "address": "127.0.0.1:56456", "selected": True},
-            "Pyatochok": {"color": (0.0, 1.0, 0.0), "address": "127.0.0.1:56456", "selected": True},
-            "Vinni": {"color": (0.0, 0.0, 1.0), "address": "127.0.0.1:56456", "selected": True},
-        }
-        self.selected_trackers: Dict = self.trackers.copy()
-
-        Bus.subscribe("connected-new-tracker", self.connected_new_tracker)
+        self._in_tracking = False
+        self._trackers: Dict = {}
+        Bus.subscribe("connected-new-tracker", self._connected_new_tracker)
 
     def _draw_content(self):
         imgui.set_window_font_scale(2)
         imgui.text("Подключенные трекеры:")
         imgui.set_window_font_scale(1.5)
-        for tracker_name in self.trackers.keys():
-            color: Tuple = self.trackers.get(tracker_name).get('color')
-            address: AnyStr = self.trackers.get(tracker_name).get('address')
-            imgui.text_colored(f"{tracker_name} ({address})", *color)
+        for tracker_name in self._trackers.keys():
+            color: Tuple = self._trackers.get(tracker_name).get('color')
+            address: AnyStr = self._trackers.get(tracker_name).get('address')
+            imgui.text_colored(f"{tracker_name} ({address})", *color, 0.5)
+            if imgui.is_item_clicked() and not self._in_tracking:
+                print(f'PRESSEF {address}')
             imgui.same_line()
-            changed, self.selected_trackers[tracker_name]["selected"] = imgui.checkbox(f"##{tracker_name}{address}",
-                                                                                       self.selected_trackers[tracker_name]["selected"])
+            changed, self._trackers[tracker_name]["selected"] = imgui.checkbox(f"##{tracker_name}{address}",
+                                                                                       self._trackers.get(tracker_name).get("selected"))
 
             if changed:
-                Bus.publish("changed-draw-mode", {"name": tracker_name,
-                                                  "draw": self.selected_trackers[tracker_name]["selected"]})
-    def connected_new_tracker(self, name: str, color: np.ndarray, address: str):
-        self.trackers[name] = {"color": color, "address": address, "selected": True}
+                Bus.publish("changed-draw-mode", tracker_name,
+                                                 self._trackers[tracker_name]["selected"])
+
+    def _connected_new_tracker(self, name: str, color: tuple, address: str):
+        self._trackers[name] = {"color": color, "address": address, "selected": True, "activated": True}
