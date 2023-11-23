@@ -44,6 +44,7 @@ class VideoPlayer:
                 if not ret:
                     self.playing = False
                     break
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 self._current_frame += 1
                 Bus.publish("new-frame", frame, self._current_frame)
                 self._frame_queue.put((self._current_frame, frame))

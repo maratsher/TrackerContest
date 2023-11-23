@@ -7,12 +7,18 @@ import cv2
 class Drawer:
     @staticmethod
     def draw_bboxes(frame: np.ndarray, bbox_list: List[Tuple[np.ndarray]]) -> np.ndarray:
-        for color, bbox in bbox_list:
+        for bbox, color in bbox_list:
             frame = Drawer.draw_bbox(frame, color, bbox)
 
         return frame
 
     @staticmethod
-    def draw_bbox(frame: np.ndarray, color: np.ndarray, bbox: np.ndarray):
+    def draw_bbox(frame: np.ndarray, color: tuple, bbox: np.ndarray):
+        color = Drawer.convert_color_imgui_to_opencv(color)
         frame = cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
         return frame
+
+    @staticmethod
+    def convert_color_imgui_to_opencv(color_imgui: tuple):
+        color_opencv = tuple(int(c * 255) for c in color_imgui[:3])
+        return color_opencv

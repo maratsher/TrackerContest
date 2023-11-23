@@ -6,8 +6,6 @@ import pickle
 import numpy as np
 import time
 
-from numpy import ndarray
-
 from TrackerContest.core import Bus
 
 
@@ -25,7 +23,7 @@ class TrackerClient:
         self._client_thread: Optional[threading.Thread] = None
         self._client_socket: socket.socket = client_socket
 
-        self._receive_buffer = 100
+        self._receive_buffer = 1024
 
     @property
     def name(self):
@@ -39,16 +37,19 @@ class TrackerClient:
     def color(self):
         return self._color
     
-    @property
     def get_bbox(self, nf: int = -1):
         if nf == -1:
-            return self._bboxes.popitem()
+            return self._bboxes.popitem()[1]
         else:
             return self._bboxes.get(nf)
 
     @property
     def draw(self) -> bool:
         return self._draw
+
+    @property
+    def client_thread(self) -> threading.Thread:
+        return self._client_thread
 
     @draw.setter
     def draw(self, draw: bool):
@@ -69,7 +70,8 @@ class TrackerClient:
         self._client_thread.start()
 
     def start_init(self, gt_bbox: tuple):
-        self._client_thread = threading.Thread(target=self._init, daemon=True, args=gt_bbox)
+        self._client_thread = threading.Thread(target=self._init, daemon=True, args=(gt_bbox, ))
+        self._client_thread.start()
 
     def _track(self, frame: np.ndarray, nf: int):
         try:
@@ -78,24 +80,25 @@ class TrackerClient:
             self._receive_data(nf)
             t2 = time.time()
             self._current_fps = 1/(t1-t2)
-            print(f"Frames sent to {self.address} ({self.name})")
         except Exception as e:
             print(f"Error sending frames to {self.address} ({self.name}): {e}")
 
     def _init(self, gt_bbox):
         try:
             self._send_data(gt_bbox)
-            print(f"Init tracker {self.address} ({self.name})")
         except Exception as e:
             print(f"Error init tracker {self.address} ({self.name}): {e}")
 
-    def _send_data(self, frame: np.ndarray):
+    def _send_data(self, frame):
         serialized_array = pickle.dumps(frame)
         self._client_socket.send(serialized_array)
 
     def _receive_data(self, nf: int):
         response = self._client_socket.recv(self._receive_buffer)
         self._bboxes[nf] = pickle.loads(response)
+
+    def __del__(self):
+        self._client_socket.close()
 
 
 class TrackerBroker:
@@ -121,6 +124,7 @@ class TrackerBroker:
 
     def setup_server(self):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind((self._host, self._port))
 
     def _start_server(self):
@@ -145,12 +149,20 @@ class TrackerBroker:
         for client in self._clients:
             client.start_track(frame, nf)
 
+        self._join()
+
     def init_all_tracker(self, gt_bbox: tuple):
         for client in self._clients:
             client.start_init(gt_bbox)
 
+        self._join()
+
     def get_all_bbox(self, nf: int = -1) -> list:
         return [(client.get_bbox(nf), client.color) for client in self._clients]
+
+    def _join(self):
+        for client in self._clients:
+            client.client_thread.join()
 
     def start(self):
         self._server_thread.start()
@@ -160,3 +172,6 @@ class TrackerBroker:
             if client.name == name:
                 client.draw = draw
                 break
+
+    def stop(self):
+        self._server_socket.close()

@@ -45,6 +45,7 @@ class TrackerContest(ImGuiApp):
     def _terminate(self):
         super()._terminate()
         self.video_player.stop()
+        self.tracker_broker.stop()
 
     def _update(self):
         super()._update()
@@ -55,14 +56,21 @@ class TrackerContest(ImGuiApp):
                 self._key_control_video()
                 if imgui.is_key_pressed(glfw.KEY_S):
                     self.video_player.pause()
+                    self._frame = cv2.cvtColor(self._frame, cv2.COLOR_RGB2BGR)
+                    # TODO
+                    cv2.namedWindow(VideoPlayer.ROI_SELECTION_WINDOW_NAME, cv2.WINDOW_NORMAL)
+                    cv2.resizeWindow(VideoPlayer.ROI_SELECTION_WINDOW_NAME, (self._window_width,
+                                     self._window_width))
+
                     cv2.imshow(VideoPlayer.ROI_SELECTION_WINDOW_NAME, self._frame)
                     gt_bbox = tuple(cv2.selectROI(VideoPlayer.ROI_SELECTION_WINDOW_NAME,
                                                   self._frame,
                                                   fromCenter=False))
                     cv2.destroyWindow(VideoPlayer.ROI_SELECTION_WINDOW_NAME)
-                    self.video_player.start()
                     self.tracker_broker.init_all_tracker(gt_bbox)
+                    # TODO if not tracking
                     self.state = States.TRACKING
+                    self.video_player.start()
 
             if self.state == States.TRACKING:
                 if imgui.is_key_pressed(glfw.KEY_V):
@@ -71,10 +79,10 @@ class TrackerContest(ImGuiApp):
                 if imgui.is_key_pressed(glfw.KEY_E):
                     self.state = States.PLAYING
 
-                if self._frame is not None:
-                    self.tracker_broker.send_frame_all_clients(self._frame, self._nf)
-                    all_bbox = self.tracker_broker.get_all_bbox()
-                    self._frame = Drawer.draw_bboxes(self._frame, all_bbox)
+                # if self._frame is not None:
+                #     self.tracker_broker.send_frame_all_clients(self._frame, self._nf)
+                #     all_bbox = self.tracker_broker.get_all_bbox()
+                #     self._frame = Drawer.draw_bboxes(self._frame, all_bbox)
 
             if self.state == States.VIEWING:
                 self._key_control_video()
@@ -105,7 +113,21 @@ class TrackerContest(ImGuiApp):
             self.video_player.seek_backward(50)
 
     def _new_frame(self, frame: np.ndarray, nf: int):
-        self._frame = frame
-        self._nf = nf
+
+        if self.state == States.PLAYING:
+            self._frame = frame
+            self._nf = nf
+
+        if self.state == States.TRACKING:
+            self.tracker_broker.send_frame_all_clients(frame, nf)
+            all_bbox = self.tracker_broker.get_all_bbox()
+            self._frame = Drawer.draw_bboxes(frame, all_bbox)
+            self._nf = nf
+
+
+
+
+
+
 
 

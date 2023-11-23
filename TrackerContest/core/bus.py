@@ -43,7 +43,7 @@ class Bus:
 
         if event_name not in bus.subscribers:
             bus.subscribers[event_name] = callback
-            _logger.debug(f"Added listener to {event_name} event")
+            #_logger.debug(f"Added listener to {event_name} event")
         else:
             raise EventAlreadyExists(f"Event {event_name} already exist")
 
@@ -52,7 +52,7 @@ class Bus:
         bus = Bus.instance()
 
         if event_name in bus.subscribers:
-            _logger.debug(f"Emit event {event_name}")
+            #_logger.debug(f"Emit event {event_name}")
             if callable(bus.subscribers[event_name]):
                 res = bus.subscribers[event_name](*args, **kwargs)
                 return res

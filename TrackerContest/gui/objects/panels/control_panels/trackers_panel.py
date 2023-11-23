@@ -22,7 +22,7 @@ class TrackersPanel(Panel):
         for tracker_name in self._trackers.keys():
             color: Tuple = self._trackers.get(tracker_name).get('color')
             address: AnyStr = self._trackers.get(tracker_name).get('address')
-            imgui.text_colored(f"{tracker_name} ({address})", *color, 0.5)
+            imgui.text_colored(f"{tracker_name} ({address})", *color, 1)
             if imgui.is_item_clicked() and not self._in_tracking:
                 print(f'PRESSEF {address}')
             imgui.same_line()
