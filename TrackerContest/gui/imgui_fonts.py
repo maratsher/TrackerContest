@@ -52,7 +52,7 @@ class ImGuiFonts:
     @staticmethod
     def get_font(font_type: FontType = FontType.REGULAR):
         if font_type not in ImGuiFonts.__fonts:
-            print("Font not initialized")
+            print("[ERROR] Font not initialized")
             return None
 
         return ImGuiFonts.__fonts[font_type]

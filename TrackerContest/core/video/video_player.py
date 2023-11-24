@@ -12,6 +12,7 @@ from TrackerContest.core import Bus
 
 class VideoPlayer:
     ROI_SELECTION_WINDOW_NAME = "Select ROI"
+    VIDEO_SHIFT = 10
 
     def __init__(self, queue_size=2000):
         self._cap: Optional[cv2.VideoCapture] = None
@@ -88,29 +89,12 @@ class VideoPlayer:
     def restart(self):
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    #TODO make one fuction
-    def seek_forward(self, fn: int):
-        target_frame = int(self._current_frame + fn)
-        start = True
-        if self._paused:
-            start = False
-        else:
-            self.pause()
-        self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
-        self._current_frame = target_frame
-        if start:
-            self.start()
-        else:
-            ret, frame = self._cap.read()
-            if not ret:
-                print('ERROR') #TODO
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            Bus.publish("new-frame", frame, self._current_frame)
-
-    def seek_backward(self, fn: int):
-        target_frame = int(self._current_frame - fn)
+    def seek(self, shift: int):
+        target_frame = int(self._current_frame + shift)
         if target_frame < 0:
             target_frame = 0
+        if target_frame >= self._cap.get(cv2.CAP_PROP_FRAME_COUNT):
+            target_frame = self._cap.get(cv2.CAP_PROP_FRAME_COUNT)
         start = True
         if self._paused:
             start = False
@@ -123,6 +107,6 @@ class VideoPlayer:
         else:
             ret, frame = self._cap.read()
             if not ret:
-                print('ERROR') #TODO
+                return
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             Bus.publish("new-frame", frame, self._current_frame)
