@@ -1,6 +1,5 @@
-import sys
 import logging
-
+import sys
 from typing import Dict, Callable
 
 _logger = logging.getLogger("Bus")
@@ -20,7 +19,6 @@ class EventNotExist(Exception):
 
 
 class Bus:
-
     __instance = None
 
     @staticmethod
