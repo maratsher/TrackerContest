@@ -1,16 +1,15 @@
+import os
+import socket
+import threading
 from typing import Optional, List
 
-import threading
-import socket
 import numpy as np
-import os
 
 from TrackerContest.core import Bus
 from TrackerContest.core.network.tracker_client import TrackerClient
 
 
 class TrackerBroker:
-
     N_MAX_TRACKER = 10
 
     def __init__(self, socket_path: str = "/tmp/server_socket"):
@@ -44,6 +43,36 @@ class TrackerBroker:
         self._server_socket.bind(self._socket_path)
         self._server_thread.start()
 
+    def send_frame_all_clients(self, frame: np.ndarray, nf: int):
+        for client in self._clients:
+            client.start_track(frame, nf)
+
+        self._join()
+
+    def init_all_tracker(self, frame: np.ndarray, gt_bbox: tuple):
+        for client in self._clients:
+            client.start_init(frame, gt_bbox)
+
+        self._join()
+
+    def get_all_bbox(self, nf: int = -1) -> list:
+        return [(client.get_bbox(nf), client.color) for client in self._clients if client.draw]
+
+    def remove_tracker(self, name: str):
+        for i in range(len(self._clients)):
+            if self._clients[i].name == name:
+                self._clients.pop(i)
+                Bus.publish("remove-tracker", name)
+
+    def close(self):
+        for client in self._clients:
+            client.close()
+        self._server_socket.close()
+        try:
+            os.remove(self._socket_path)
+        except OSError:
+            pass
+
     def _start_server(self):
         self._server_socket.listen(TrackerBroker.N_MAX_TRACKER)
 
@@ -61,21 +90,6 @@ class TrackerBroker:
             except Exception as e:
                 print("[ERROR] Server error: ", e)
 
-    def send_frame_all_clients(self, frame: np.ndarray, nf: int):
-        for client in self._clients:
-            client.start_track(frame, nf)
-
-        self._join()
-
-    def init_all_tracker(self, frame: np.ndarray, gt_bbox: tuple):
-        for client in self._clients:
-            client.start_init(frame, gt_bbox)
-
-        self._join()
-
-    def get_all_bbox(self, nf: int = -1) -> list:
-        return [(client.get_bbox(nf), client.color) for client in self._clients if client.draw]
-
     def _join(self):
         for client in self._clients:
             client.client_thread.join()
@@ -86,22 +100,6 @@ class TrackerBroker:
                 client.draw = draw
                 break
 
-    def close(self):
-        for client in self._clients:
-            client.close()
-        self._server_socket.close()
-        try:
-            os.remove(self._socket_path)
-        except OSError:
-            pass
-
     def _stop_tracking(self):
         for client in self._clients:
             client.stop_tracking()
-
-    def remove_tracker(self, name: str):
-        for i in range(len(self._clients)):
-            if self._clients[i].name == name:
-                self._clients.pop(i)
-                Bus.publish("remove-tracker", name)
-

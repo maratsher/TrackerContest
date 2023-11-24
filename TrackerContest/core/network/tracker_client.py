@@ -1,11 +1,11 @@
+import pickle
+import socket
+import threading
+import time
 from typing import Optional, Dict
 
-import threading
-import socket
-import pickle
-import numpy as np
-import time
 import msgpack_numpy as mp
+import numpy as np
 
 from TrackerContest.core import Bus
 
@@ -31,27 +31,24 @@ class TrackerClient:
         return self._name
 
     @property
-    def address(self):
-        return self._address
-
-    @property
     def color(self):
         return self._color
-
-    def get_bbox(self, nf):
-        return self._bboxes.get(nf)
-
-    @property
-    def draw(self) -> bool:
-        return self._draw
 
     @property
     def client_thread(self) -> threading.Thread:
         return self._client_thread
 
+    @property
+    def draw(self) -> bool:
+        return self._draw
+
     @draw.setter
     def draw(self, draw: bool):
         self._draw = draw
+
+    @property
+    def address(self):
+        return self._address
 
     @address.setter
     def address(self, address: str):
@@ -70,6 +67,16 @@ class TrackerClient:
     def start_init(self, frame: np.ndarray, gt_bbox: tuple):
         self._client_thread = threading.Thread(target=self._init, daemon=True, args=(frame, gt_bbox,))
         self._client_thread.start()
+
+    def stop_tracking(self):
+        self._client_thread.join()
+        self._send_data("stop")
+
+    def get_bbox(self, nf):
+        return self._bboxes.get(nf)
+
+    def close(self):
+        self._client_socket.close()
 
     def _track(self, frame: np.ndarray, nf: int):
         try:
@@ -99,11 +106,3 @@ class TrackerClient:
         self._current_fps = response_dict.get("fps")
         self._bboxes[nf] = response_dict.get("bbox")
         Bus.publish("update-tracker-fps", self._name, self._current_fps)
-
-    def stop_tracking(self):
-        self._client_thread.join()
-        self._send_data("stop")
-
-    def close(self):
-        self._client_socket.close()
-

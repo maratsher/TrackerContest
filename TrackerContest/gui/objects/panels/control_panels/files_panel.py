@@ -1,9 +1,9 @@
-import imgui
 from pathlib import Path
 
-from TrackerContest.gui.objects.panels import Panel
+import imgui
 
 from TrackerContest.core import Bus
+from TrackerContest.gui.objects.panels import Panel
 
 
 class FilesControl(Panel):
@@ -17,8 +17,9 @@ class FilesControl(Panel):
         self._save_status = ""
 
     def _draw_content(self):
-        imgui.dummy(0, 5)
+        imgui.dummy(0, 10)
 
+        imgui.set_window_font_scale(1.5)
         imgui.indent(10)
         window_width, window_height = imgui.get_window_size()
 
@@ -60,5 +61,7 @@ class FilesControl(Panel):
             else:
                 self._save_path = "Saved dir does not exist"
 
+        imgui.dummy(0, 5)
+        imgui.set_window_font_scale(1.7)
         imgui.text(self._input_status)
         imgui.text(self._save_status)

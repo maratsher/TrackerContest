@@ -1,11 +1,8 @@
+import threading
+import time
 from typing import Optional
 
 import cv2
-import threading
-import queue
-import time
-
-import numpy as np
 
 from TrackerContest.core import Bus
 
@@ -36,20 +33,6 @@ class VideoPlayer:
         self._frame_size = (int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
         self.start()
         Bus.publish("set-init-fps", self._fps)
-
-    def _load_frames(self):
-        while True:
-            if self._playing and not self._paused:
-                ret, frame = self._cap.read()
-                if not ret:
-                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                self._current_frame += 1
-                Bus.publish("new-frame", frame, self._current_frame)
-                time.sleep(1/self._fps)
-            else:
-                time.sleep(0.1)
 
     @property
     def fps(self) -> int:
@@ -110,3 +93,17 @@ class VideoPlayer:
                 return
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             Bus.publish("new-frame", frame, self._current_frame)
+
+    def _load_frames(self):
+        while True:
+            if self._playing and not self._paused:
+                ret, frame = self._cap.read()
+                if not ret:
+                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                self._current_frame += 1
+                Bus.publish("new-frame", frame, self._current_frame)
+                time.sleep(1 / self._fps)
+            else:
+                time.sleep(0.1)

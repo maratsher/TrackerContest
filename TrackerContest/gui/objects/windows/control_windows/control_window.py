@@ -2,9 +2,9 @@ from typing import List
 
 import imgui
 
-from TrackerContest.gui.objects.windows import Window
 from TrackerContest.gui.objects.panels import Panel
 from TrackerContest.gui.objects.panels.control_panels import StreamControl, FilesControl
+from TrackerContest.gui.objects.windows import Window
 
 
 class ControlWindow(Window):
@@ -12,7 +12,7 @@ class ControlWindow(Window):
         super().__init__(x, y)
         self._id = "Control Panel"
 
-        self._panels: List[Panel] = [FilesControl(), StreamControl()]
+        self._panels: List[Panel] = [StreamControl(), FilesControl()]
         self._current_panel = self._panels[0]
 
     def _draw_buttons(self):

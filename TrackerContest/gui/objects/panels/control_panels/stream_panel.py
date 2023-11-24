@@ -2,9 +2,8 @@ from typing import Dict, Tuple, AnyStr
 
 import imgui
 
-from TrackerContest.gui.objects.panels import Panel
-
 from TrackerContest.core import Bus
+from TrackerContest.gui.objects.panels import Panel
 
 
 class StreamControl(Panel):
@@ -36,7 +35,7 @@ class StreamControl(Panel):
         if changed:
             Bus.publish("set-fps", self._fps)
 
-        imgui.set_window_font_scale(1.5)
+        imgui.set_window_font_scale(1.7)
         imgui.dummy(5, 5)
         imgui.text(f"Real FPS: {self._real_fps}")
 
@@ -48,7 +47,7 @@ class StreamControl(Panel):
             color: Tuple = self._trackers.get(tracker_name).get('color')
             address: AnyStr = self._trackers.get(tracker_name).get('address')
             tracker_fps: int = self._trackers.get(tracker_name).get("fps")
-            activated:  bool = self._trackers.get(tracker_name).get("activated")
+            activated: bool = self._trackers.get(tracker_name).get("activated")
             imgui.text_colored(f"{tracker_name} (fps: {tracker_fps})", *color, self._brightness)
             imgui.same_line()
             changed, self._trackers[tracker_name]["selected"] = imgui.checkbox(f"##{tracker_name}{address}",
