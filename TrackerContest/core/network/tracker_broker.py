@@ -5,6 +5,8 @@ import socket
 import pickle
 import numpy as np
 import time
+import os
+import msgpack_numpy as mp
 
 from TrackerContest.core import Bus
 
@@ -37,11 +39,8 @@ class TrackerClient:
     def color(self):
         return self._color
     
-    def get_bbox(self, nf: int = -1):
-        if nf == -1:
-            return self._bboxes.popitem()[1]
-        else:
-            return self._bboxes.get(nf)
+    def get_bbox(self, nf):
+        return self._bboxes.get(nf)
 
     @property
     def draw(self) -> bool:
@@ -69,35 +68,47 @@ class TrackerClient:
         self._client_thread = threading.Thread(target=self._track, daemon=True, args=(frame, nf))
         self._client_thread.start()
 
-    def start_init(self, gt_bbox: tuple):
-        self._client_thread = threading.Thread(target=self._init, daemon=True, args=(gt_bbox, ))
+    def start_init(self, frame: np.ndarray, gt_bbox: tuple):
+        self._client_thread = threading.Thread(target=self._init, daemon=True, args=(frame, gt_bbox, ))
         self._client_thread.start()
 
     def _track(self, frame: np.ndarray, nf: int):
         try:
             self._send_data(frame)
-            t1 = time.time()
             self._receive_data(nf)
-            t2 = time.time()
-            self._current_fps = 1/(t1-t2)
         except Exception as e:
-            print(f"Error sending frames to {self.address} ({self.name}): {e}")
+            print(f"Error _track ({self.name}): {e}")
 
-    def _init(self, gt_bbox):
+    def _init(self, frame: np.ndarray, gt_bbox: tuple):
         try:
+            self._send_data(frame)
+            time.sleep(0.1)
             self._send_data(gt_bbox)
+            time.sleep(0.1)
+            print("data sent")
         except Exception as e:
-            print(f"Error init tracker {self.address} ({self.name}): {e}")
+            print(f"Error init tracker ({self.name}): {e}")
 
     def _send_data(self, frame):
-        serialized_array = pickle.dumps(frame)
-        self._client_socket.send(serialized_array)
+        try:
+            serialized_array = mp.packb(frame, default=mp.encode)
+            self._client_socket.send(serialized_array)
+        except BrokenPipeError or ConnectionResetError:
+            Bus.publish("error-tracking", self._name)
 
     def _receive_data(self, nf: int):
-        response = self._client_socket.recv(self._receive_buffer)
-        self._bboxes[nf] = pickle.loads(response)
+        response_dict = pickle.loads(self._client_socket.recv(self._receive_buffer))
+        self._current_fps = response_dict.get("fps")
+        self._bboxes[nf] = response_dict.get("bbox")
+        Bus.publish("update-tracker-fps", self._name, self._current_fps)
+        print(f"receive bbox {self._bboxes[nf]}")
+        print(f"fps {self._bboxes[nf]}")
 
-    def __del__(self):
+    def stop_tracking(self):
+        self._client_thread.join()
+        self._send_data("stop")
+
+    def close(self):
         self._client_socket.close()
 
 
@@ -105,32 +116,41 @@ class TrackerBroker:
 
     N_MAX_TRACKER = 10
 
-    def __init__(self, host='localhost', port=8080):
-        self._host: str = host
-        self._port: int = port
+    def __init__(self, socket_path: str = "/tmp/server_socket"):
+        self._socket_path = socket_path
         self._clients: List[TrackerClient] = []
         self._server_thread: threading.Thread = threading.Thread(target=self._start_server, daemon=True)
         self._server_socket: Optional[socket] = None
 
-        Bus.subscribe("changed-draw-mode", self.change_client_draw_mode)
+        Bus.subscribe("changed-draw-mode", self._change_client_draw_mode)
+        Bus.subscribe("stop-tracking", self._stop_tracking)
 
     @property
     def server_address(self):
-        return self._host, self._port
+        return self._socket_path
 
     @server_address.setter
-    def server_address(self, new_address: tuple):
-        self._host, self._port = new_address
+    def server_address(self, new_address: str):
+        self._socket_path = new_address
+
+    @property
+    def num_clients(self):
+        return len(self._clients)
 
     def setup_server(self):
-        self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            os.remove(self._socket_path)
+        except OSError:
+            pass
+        self._server_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server_socket.bind((self._host, self._port))
+        self._server_socket.bind(self._socket_path)
+        self._server_thread.start()
 
     def _start_server(self):
         self._server_socket.listen(TrackerBroker.N_MAX_TRACKER)
 
-        print(f"Server listening on {self._host}:{self._port}")
+        print(f"Server listening on {self._socket_path}")
 
         while True:
             try:
@@ -151,27 +171,41 @@ class TrackerBroker:
 
         self._join()
 
-    def init_all_tracker(self, gt_bbox: tuple):
+    def init_all_tracker(self, frame: np.ndarray, gt_bbox: tuple):
         for client in self._clients:
-            client.start_init(gt_bbox)
+            client.start_init(frame, gt_bbox)
 
         self._join()
 
     def get_all_bbox(self, nf: int = -1) -> list:
-        return [(client.get_bbox(nf), client.color) for client in self._clients]
+        return [(client.get_bbox(nf), client.color) for client in self._clients if client.draw]
 
     def _join(self):
         for client in self._clients:
             client.client_thread.join()
 
-    def start(self):
-        self._server_thread.start()
-
-    def change_client_draw_mode(self, name: str, draw: bool):
+    def _change_client_draw_mode(self, name: str, draw: bool):
         for client in self._clients:
             if client.name == name:
                 client.draw = draw
                 break
 
-    def stop(self):
+    def close(self):
+        for client in self._clients:
+            client.close()
         self._server_socket.close()
+        try:
+            os.remove(self._socket_path)
+        except OSError:
+            pass
+
+    def _stop_tracking(self):
+        for client in self._clients:
+            client.stop_tracking()
+
+    def remove_tracker(self, name: str):
+        for i in range(len(self._clients)):
+            if self._clients[i].name == name:
+                self._clients.pop(i)
+                Bus.publish("remove-tracker", name)
+

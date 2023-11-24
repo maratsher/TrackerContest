@@ -18,7 +18,6 @@ class VideoPlayer:
         self._fps: int = 0
         self._frame_size: Optional[tuple[int]] = None
 
-        self._frame_queue = queue.Queue(maxsize=queue_size)
         self._playing = False
         self._paused = True
         self._current_frame = 0
@@ -42,12 +41,11 @@ class VideoPlayer:
             if self._playing and not self._paused:
                 ret, frame = self._cap.read()
                 if not ret:
-                    self.playing = False
-                    break
+                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 self._current_frame += 1
                 Bus.publish("new-frame", frame, self._current_frame)
-                self._frame_queue.put((self._current_frame, frame))
                 time.sleep(1/self._fps)
             else:
                 time.sleep(0.1)
@@ -84,29 +82,47 @@ class VideoPlayer:
     def stop(self):
         self._playing = False
         self._paused = False
-        self._cap.release()
-
-    def get_frame(self) -> np.ndarray:
-        if not self._frame_queue.empty():
-            return self._frame_queue.get()[1]
-        else:
-            return None
+        if self._cap:
+            self._cap.release()
 
     def restart(self):
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
+    #TODO make one fuction
     def seek_forward(self, fn: int):
         target_frame = int(self._current_frame + fn)
-        self.pause()
+        start = True
+        if self._paused:
+            start = False
+        else:
+            self.pause()
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
         self._current_frame = target_frame
-        self.start()
+        if start:
+            self.start()
+        else:
+            ret, frame = self._cap.read()
+            if not ret:
+                print('ERROR') #TODO
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            Bus.publish("new-frame", frame, self._current_frame)
 
     def seek_backward(self, fn: int):
         target_frame = int(self._current_frame - fn)
         if target_frame < 0:
             target_frame = 0
-        self.pause()
+        start = True
+        if self._paused:
+            start = False
+        else:
+            self.pause()
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
         self._current_frame = target_frame
-        self.start()
+        if start:
+            self.start()
+        else:
+            ret, frame = self._cap.read()
+            if not ret:
+                print('ERROR') #TODO
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            Bus.publish("new-frame", frame, self._current_frame)
